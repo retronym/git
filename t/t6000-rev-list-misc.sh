@@ -48,6 +48,24 @@ test_expect_success 'rev-list --objects with pathspecs and copied files' '
 	! grep one output
 '
 
+test_expect_success 'rev-list --objects --no-object-names has no space/names' '
+	git rev-list --objects --no-object-names HEAD >output &&
+	! grep wanted_file output &&
+	! grep unwanted_file output &&
+	! grep " " output
+'
+
+test_expect_success 'rev-list --objects --no-object-names works with cat-file' '
+	git rev-list --objects --no-object-names --all >list-output &&
+	git cat-file --batch-check <list-output >cat-output &&
+	! grep missing cat-output
+'
+
+test_expect_success 'rev-list --oid-only is incompatible with --pretty' '
+	test_must_fail git rev-list --objects --oid-only --pretty HEAD &&
+	test_must_fail git rev-list --objects --oid-only --header HEAD
+'
+
 test_expect_success 'rev-list A..B and rev-list ^A B are the same' '
 	git commit --allow-empty -m another &&
 	git tag -a -m "annotated" v1.0 &&
