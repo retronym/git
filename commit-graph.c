@@ -43,15 +43,23 @@
 
 char *get_commit_graph_filename(const char *obj_dir)
 {
-	return xstrfmt("%s/info/commit-graph", obj_dir);
+	char *filename = xstrfmt("%s/info/commit-graph", obj_dir);
+	char *normalized = xmalloc(strlen(filename) + 1);
+	normalize_path_copy(normalized, filename);
+	free(filename);
+	return normalized;
 }
 
 static char *get_split_graph_filename(const char *obj_dir,
 				      const char *oid_hex)
 {
-	return xstrfmt("%s/info/commit-graphs/graph-%s.graph",
-		       obj_dir,
-		       oid_hex);
+	char *filename = xstrfmt("%s/info/commit-graphs/graph-%s.graph",
+				 obj_dir,
+				 oid_hex);
+	char *normalized = xmalloc(strlen(filename) + 1);
+	normalize_path_copy(normalized, filename);
+	free(filename);
+	return normalized;
 }
 
 static char *get_chain_filename(const char *obj_dir)
@@ -751,7 +759,7 @@ struct packed_oid_list {
 
 struct write_commit_graph_context {
 	struct repository *r;
-	const char *obj_dir;
+	char *obj_dir;
 	char *graph_name;
 	struct packed_oid_list oids;
 	struct packed_commit_list commits;
@@ -1700,7 +1708,11 @@ static void expire_commit_graphs(struct write_commit_graph_context *ctx)
 	}
 
 	strbuf_addstr(&path, ctx->obj_dir);
-	strbuf_addstr(&path, "/info/commit-graphs");
+
+	if (path.buf[path.len - 1] != '/')
+		strbuf_addch(&path, '/');
+
+	strbuf_addstr(&path, "info/commit-graphs");
 	dir = opendir(path.buf);
 
 	if (!dir) {
@@ -1734,7 +1746,6 @@ static void expire_commit_graphs(struct write_commit_graph_context *ctx)
 
 		if (!found)
 			unlink(path.buf);
-
 	}
 }
 
@@ -1746,6 +1757,7 @@ int write_commit_graph(const char *obj_dir,
 {
 	struct write_commit_graph_context *ctx;
 	uint32_t i, count_distinct = 0;
+	size_t len;
 	int res = 0;
 
 	if (!commit_graph_compatible(the_repository))
@@ -1753,7 +1765,14 @@ int write_commit_graph(const char *obj_dir,
 
 	ctx = xcalloc(1, sizeof(struct write_commit_graph_context));
 	ctx->r = the_repository;
-	ctx->obj_dir = obj_dir;
+
+	/* normalize object dir with no trailing slash */
+	ctx->obj_dir = xmallocz(strlen(obj_dir) + 1);
+	normalize_path_copy(ctx->obj_dir, obj_dir);
+	len = strlen(ctx->obj_dir);
+	if (len && ctx->obj_dir[len - 1] == '/')
+		ctx->obj_dir[len - 1] = 0;
+
 	ctx->append = flags & COMMIT_GRAPH_APPEND ? 1 : 0;
 	ctx->report_progress = flags & COMMIT_GRAPH_PROGRESS ? 1 : 0;
 	ctx->split = flags & COMMIT_GRAPH_SPLIT ? 1 : 0;
@@ -1861,6 +1880,7 @@ cleanup:
 	free(ctx->graph_name);
 	free(ctx->commits.list);
 	free(ctx->oids.list);
+	free(ctx->obj_dir);
 
 	if (ctx->commit_graph_filenames_after) {
 		for (i = 0; i < ctx->num_commit_graphs_after; i++) {
